@@ -134,6 +134,3 @@ debian       latest    c31f65dd4cc9   10 days ago     124MB
   - mise à jour du système
   - installation de Apache
   - page d'accueil Apache HTML personnalisée
-
-📁 **`Dockerfile`**
-
