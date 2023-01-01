@@ -228,5 +228,188 @@ that the software it working correctly.
 
 # II. Une stack web plus avancée
 
-## 1. Intro blabla
+### A. Base de données
+
+🌞 **Install de MariaDB sur `db.tp2.linux`**
+
+```bash
+# Installation de mariadb
+[rhahel@localhost ~]$ sudo dnf install mariadb-server
+[...]
+Complete!
+
+# Lancement et activation de mariadb au démarrage
+[rhahel@localhost ~]$  sudo systemctl start mariadb
+[rhahel@localhost ~]$  sudo systemctl enable mariadb
+Created symlink /etc/systemd/system/mysql.service → /usr/lib/systemd/system/mariadb.service.
+Created symlink /etc/systemd/system/mysqld.service → /usr/lib/systemd/system/mariadb.service.
+Created symlink /etc/systemd/system/multi-user.target.wants/mariadb.service → /usr/lib/systemd/system/mariadb.service
+
+# Configuration sécurisée de mariadb
+[rhahel@localhost ~]$  sudo mysql_secure_installation
+[...]
+Thanks for using MariaDB!
+
+# Ouverture du port utilisé par mariadb (port 3306)
+[rhahel@localhost ~]$  sudo firewall-cmd --add-port=3306/tcp --permanent
+success
+[rhahel@localhost ~]$  sudo firewall-cmd --reload
+success
+```
+
+🌞 **Préparation de la base pour NextCloud**
+
+```bash
+[rhahel@localhost ~]$  sudo mysql -u root -p
+
+MariaDB [(none)]> CREATE USER 'nextcloud'@'10.102.1.11' IDENTIFIED BY 'nextc
+loud';
+Query OK, 0 rows affected (0.006 sec)
+
+MariaDB [(none)]> CREATE DATABASE IF NOT EXISTS nextcloud CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+Query OK, 1 row affected (0.000 sec)
+
+MariaDB [(none)]> GRANT ALL PRIVILEGES ON nextcloud.* TO 'nextcloud'@'10.102.1.11';
+Query OK, 0 rows affected (0.003 sec)
+
+MariaDB [(none)]> FLUSH PRIVILEGES;
+Query OK, 0 rows affected (0.000 sec)
+```
+
+🌞 **Exploration de la base de données**
+
+```bash
+# Installation de mysql
+[rhahel@localhost ~]$  sudo dnf install -y mysql
+[...]
+Complete!
+
+# Connexion à la database
+[rhahel@localhost ~]$ mysql -u nextcloud -h 10.102.1.12 -p
+
+# Exploration de la database
+mysql> SHOW DATABASES;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| nextcloud          |
++--------------------+
+2 rows in set (0.00 sec)
+
+mysql> USE nextcloud;
+Database changed
+mysql> SHOW TABLES;
+Empty set (0.00 sec)
+```
+
+🌞 **Trouver une commande SQL qui permet de lister tous les utilisateurs de la base de données**
+
+```bash
+[rhahel@localhost ~]$ sudo mysql -u root -p
+
+MariaDB [(none)]> SELECT user FROM mysql.user;
++-------------+
+| User        |
++-------------+
+| nextcloud   |
+| mariadb.sys |
+| mysql       |
+| root        |
++-------------+
+```
+
+### B. Serveur Web et NextCloud
+
+🌞 **Install de PHP**
+
+```bash
+# On ajoute le dépôt CRB
+[rhahel@localhost ~]$  sudo dnf config-manager --set-enabled crb
+
+# On ajoute le dépôt REMI
+[rhahel@localhost ~]$  sudo dnf install dnf-utils http://rpms.remirepo.net/enterprise/remi-release-9.rpm -y
+[...]
+Complete!
+
+# On liste les versions de PHP dispos, au passage on va pouvoir accepter les clés du dépôt REMI
+[rhahel@localhost ~]$  dnf module list php
+[...]
+Hint: [d]efault, [e]nabled, [x]disabled, [i]nstalled
+
+# On active le dépôt REMI pour récupérer une version spécifique de PHP, celle recommandée par la doc de NextCloud
+[rhahel@localhost ~]$  sudo dnf module enable php:remi-8.1 -y
+Complete!
+
+# Eeeet enfin, on installe la bonne version de PHP : 8.1
+[rhahel@localhost ~]$  sudo dnf install -y php81-php
+[...]
+Complete!
+```
+
+🌞 **Install de tous les modules PHP nécessaires pour NextCloud**
+
+```bash
+[rhahel@localhost ~]$  sudo dnf install -y libxml2 openssl php81-php php81-php-ctype php81-php-curl php81-php-gd php81-php-iconv php81-php-json php81-php-libxml php81-php-mbstring php81-php-openssl php81-php-posix php81-php-session php81-php-xml php81-php-zip php81-php-zlib php81-php-pdo php81-php-mysqlnd php81-php-intl php81-php-bcmath php81-php-gm
+[...]
+Complete!
+```
+
+🌞 **Récupérer NextCloud**
+
+- Créer le dossier `/var/www/tp2_nextcloud/`
+    ```bash
+    [rhahel@localhost ~]$  sudo mkdir /var/www/tp2_nextcloud
+    [rhahel@localhost ~]$  ls /var/www
+    cgi-bin  html  tp2_nextcloud
+    ```
+- Download Nextcloud
+    ```bash
+    # Download
+    [rhahel@localhost ~]$  curl https://download.nextcloud.com/server/prereleases/nextcloud-25.0.0rc3.zip
+    [rhahel@localhost ~]$  ls
+    nextcloud.zip
+
+    # Extraire
+    [rhahel@localhost ~]$  sudo dnf install unzip
+    Complete!
+    [rhahel@localhost ~]$  unzip nextcloud.zip
+    [...]
+    [rhahel@localhost ~]$ ls
+    nextcloud  nextcloud.zip
+
+    # Déplacement du contenu du dossier nextcloud vers notre racine web
+    [rhahel@localhost ~]$ sudo mv * /var/www/tp2_nextcloud/
+    [rhahel@localhost ~]$  sudo mv .* /var/www/tp2_nextcloud/
+
+    # Application des permissions
+    [rhahel@localhost ~]$  sudo chown -R apache:apache /var/www/tp2_nextcloud/
+    ```
+
+🌞 **Adapter la configuration d'Apache**
+
+```bash
+[rhahel@localhost ~]$  sudo nano /etc/httpd/conf.d/nextcloud.conf
+[rhahel@localhost ~]$  cat /etc/httpd/conf.d/nextcloud.conf
+<VirtualHost *:80>
+  DocumentRoot /var/www/tp2_nextcloud/
+  ServerName  web.tp2.linux
+  <Directory /var/www/tp2_nextcloud/>
+    Require all granted
+    AllowOverride All
+    Options FollowSymLinks MultiViews
+    <IfModule mod_dav.c>
+      Dav off
+    </IfModule>
+  </Directory>
+</VirtualHost>
+```
+
+🌞 **Redémarrer le service Apache**
+
+```bash
+[rhahel@localhost ~]$  sudo systemctl restart httpd
+```
+
+
 
